@@ -13,9 +13,33 @@ const serverDb = [
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export const fetchTasks = async (searchQuery, category) => {
-  const q = searchQuery.trim().toLowerCase();
-  await wait(q.length === 1 ? 1800 : 250);
+export const fetchTasks = async (searchQuery = '', category = 'All', options = {}) => {
+  const signal = options?.signal;
+  const q = (searchQuery || '').trim().toLowerCase();
+  const delay = q.length === 1 ? 1800 : 250;
+
+  await new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('Aborted', 'AbortError'));
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      if (signal) {
+        signal.removeEventListener('abort', onAbort);
+      }
+      resolve();
+    }, delay);
+
+    function onAbort() {
+      clearTimeout(timer);
+      reject(new DOMException('Aborted', 'AbortError'));
+    }
+
+    if (signal) {
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+  });
 
   return serverDb
     .filter((task) => {
@@ -34,4 +58,10 @@ export const updateTask = async (id, patch) => {
   const target = serverDb.find((task) => task.id === id);
   if (target) Object.assign(target, patch);
   return target ? { ...target } : null;
+};
+
+const initialServerDb = JSON.parse(JSON.stringify(serverDb));
+export const _resetServerDb = () => {
+  serverDb.length = 0;
+  serverDb.push(...JSON.parse(JSON.stringify(initialServerDb)));
 };
